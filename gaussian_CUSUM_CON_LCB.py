@@ -1,70 +1,6 @@
 import numpy as np
 from collections import deque
-import matplotlib.pyplot as plt
 
-class Environment:
-    """
-    Manages the true state of the multi-armed bandit environment, including the
-    non-stationary change and the correct regret calculation.
-    """
-    def __init__(self):
-        # Initial parameters for the first period
-        self.arm0_means = np.array([0.3, 0.4, 0.6, 0.2, 0.5]) # g0
-        self.arm1_means = np.array([0.4, 0.3, 0.1, 0.9, 1.0]) # g1
-        self.arm2_means = np.array([0.3, 0.4, 0.8, 0.2, 1.0]) # g2
-        self.cov = [[1, 0.5, 0.5], [0.5, 1, 0.5], [0.5, 0.5, 1]]
-
-        # Separate trackers for each regret type
-        self.subopt_regret_history = []
-        self.cumulative_subopt_regret = 0
-        self.infeas_regret_history = []
-        self.cumulative_infeas_regret = 0
-
-    def data_function(self, arm, t, T):
-        """
-        Returns a sample from the specified arm and updates the environment's
-        state if the non-stationary change point has been reached.
-        """
-        if t > T / 2:
-            self.arm0_means = np.array([0.3, 0.4, 0.25, 0.5, 0.1]) # g0
-            self.arm1_means = np.array([0.8, 0.3, 0.1, 0.3, 1.0]) # g1
-            self.arm2_means = np.array([0.3, 0.7, 0.4, 0.2, 0.2]) # g2
-        mean = [self.arm0_means[arm], self.arm1_means[arm], self.arm2_means[arm]]
-        sample = np.random.multivariate_normal(mean, self.cov)
-        return sample
-
-    def regret_calculation(self, arm, threshold1, threshold2):
-        """
-        Calculates regret based on the type of error (suboptimality vs. infeasibility).
-        """
-        is_feasible = (self.arm1_means[arm] <= threshold1) and \
-                      (self.arm2_means[arm] <= threshold2)
-        
-        if is_feasible:
-            feasible_arms_indices = np.where((self.arm1_means <= threshold1) & (self.arm2_means <= threshold2))[0]
-            if feasible_arms_indices.size > 0:
-                optimal_g0 = np.min(self.arm0_means[feasible_arms_indices])
-                chosen_g0 = self.arm0_means[arm]
-                self.cumulative_subopt_regret += (chosen_g0 - optimal_g0)
-        else:
-            violation1 = max(0, self.arm1_means[arm] - threshold1)
-            violation2 = max(0, self.arm2_means[arm] - threshold2)
-            self.cumulative_infeas_regret += (violation1 + violation2)
-        
-        self.subopt_regret_history.append(self.cumulative_subopt_regret)
-        self.infeas_regret_history.append(self.cumulative_infeas_regret)
-
-    def plot_regret(self):
-        """Plots both suboptimality and infeasibility regret over time."""
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.subopt_regret_history, label='Suboptimality Regret')
-        plt.plot(self.infeas_regret_history, label='Infeasibility Regret')
-        plt.title("Cumulative Regret Over Time (CUSUM CON-LCB)")
-        plt.xlabel("Time Step (t)")
-        plt.ylabel("Cumulative Regret")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
 
 def cusum_con_lcb(T, K, threshold1, threshold2, M, epsilon, h):
     """
@@ -168,31 +104,3 @@ def cusum_con_lcb(T, K, threshold1, threshold2, M, epsilon, h):
     }
     return (feasibility_flag, regret_histories)
 
-if __name__ == "__main__":
-    
-    T = 50000
-    K = 4
-    THRESHOLD1 = 0.5
-    THRESHOLD2 = 0.4
-    
-    M = 50       # Min samples before starting detector
-    epsilon = 0.1 # Drift tolerance
-    h = 50       # Detection threshold
-
-    print("--- CUSUM CON-LCB ---")
-    print(f"Time Horizon (T): {T}")
-    print(f"Number of Arms (K): {K}")
-    print(f"Constraint 1 (g1_mean) <= {THRESHOLD1}")
-    print(f"Constraint 2 (g2_mean) <= {THRESHOLD2}")
-    print(f"Note: Environment changes at T/2.")
-    print(f"CUSUM params: M={M}, epsilon={epsilon}, h={h}")
-
-    feasibility_flag, regret_histories = cusum_con_lcb(T, K, THRESHOLD1, THRESHOLD2, M, epsilon, h)
-
-    print("\n--- Simulation Results ---")
-    print(f"{'Instance was determined to be Feasible' if feasibility_flag == 1 else 'Instance was determined to be Infeasible'}")
-    
-    if regret_histories["suboptimality"]:
-        print(f"Final Suboptimality Regret: {regret_histories['suboptimality'][-1]:.2f}")
-    if regret_histories["infeasibility"]:
-        print(f"Final Infeasibility Regret: {regret_histories['infeasibility'][-1]:.2f}")
